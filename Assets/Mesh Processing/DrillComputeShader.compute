@@ -1,0 +1,144 @@
+// DrillingComputeShader.compute
+// GPU-accelerated cylindrical drilling for mesh processing
+
+#pragma kernel CSMain
+
+// Buffers
+RWStructuredBuffer<float4> vertices;
+RWStructuredBuffer<float4> results;
+
+// Vertex count
+int vertexCount;
+
+// Drill parameters
+float drillRadius;
+float drillLength;
+
+// Drill transform matrices
+float4x4 drillWorldToLocal;
+float4x4 drillLocalToWorld;
+
+// Drill axis configuration (0=X, 1=Y, 2=Z)
+int drillAxisIndex;
+float drillAxisSign;
+
+// Bounds clamping
+float3 boundsMin;
+float3 boundsMax;
+int enforceBounds;
+
+#define THREAD_GROUP_SIZE 256
+#define EPSILON 0.0001
+
+// Transform world point to drill space where Y is always the drill axis
+float3 WorldToDrillSpace(float3 worldPos)
+{
+    // Transform to drill's local space
+    float4 localPos4 = mul(drillWorldToLocal, float4(worldPos, 1.0));
+    float3 localPos = localPos4.xyz;
+    
+    // Remap so drill axis becomes Y
+    float3 drillSpace;
+    
+    if (drillAxisIndex == 0) // X axis
+    {
+        drillSpace = float3(localPos.y, localPos.x * drillAxisSign, localPos.z);
+    }
+    else if (drillAxisIndex == 1) // Y axis
+    {
+        drillSpace = float3(localPos.x, localPos.y * drillAxisSign, localPos.z);
+    }
+    else // Z axis
+    {
+        drillSpace = float3(localPos.x, localPos.z * drillAxisSign, localPos.y);
+    }
+    
+    return drillSpace;
+}
+
+// Transform drill space point back to world space
+float3 DrillSpaceToWorld(float3 drillSpace)
+{
+    float3 localPos;
+    
+    if (drillAxisIndex == 0) // X axis
+    {
+        localPos = float3(drillSpace.y * drillAxisSign, drillSpace.x, drillSpace.z);
+    }
+    else if (drillAxisIndex == 1) // Y axis
+    {
+        localPos = float3(drillSpace.x, drillSpace.y * drillAxisSign, drillSpace.z);
+    }
+    else // Z axis
+    {
+        localPos = float3(drillSpace.x, drillSpace.z, drillSpace.y * drillAxisSign);
+    }
+    
+    float4 worldPos4 = mul(drillLocalToWorld, float4(localPos, 1.0));
+    return worldPos4.xyz;
+}
+
+// Clamp position to bounds
+float3 ClampToBounds(float3 pos)
+{
+    return clamp(pos, boundsMin, boundsMax);
+}
+
+[numthreads(THREAD_GROUP_SIZE, 1, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    uint index = id.x;
+    
+    if (index >= (uint)vertexCount)
+        return;
+    
+    float4 vertex = vertices[index];
+    float3 worldPos = vertex.xyz;
+    float affected = 0.0;
+    
+    // Transform to drill space
+    float3 drillSpace = WorldToDrillSpace(worldPos);
+    
+    // Check if within drill length (Y axis in drill space)
+    bool withinLength = drillSpace.y >= 0.0 && drillSpace.y <= drillLength;
+    
+    if (withinLength)
+    {
+        // Calculate radial distance (XZ plane in drill space)
+        float radialDistSqr = drillSpace.x * drillSpace.x + drillSpace.z * drillSpace.z;
+        float radiusSqr = drillRadius * drillRadius;
+        
+        if (radialDistSqr < radiusSqr)
+        {
+            // Point is inside cylinder - project to surface
+            float radialDist = sqrt(radialDistSqr);
+            
+            if (radialDist < EPSILON)
+            {
+                // Point is on axis - push in arbitrary direction
+                drillSpace.x = drillRadius;
+                drillSpace.z = 0.0;
+            }
+            else
+            {
+                // Scale outward to radius
+                float scale = drillRadius / radialDist;
+                drillSpace.x *= scale;
+                drillSpace.z *= scale;
+            }
+            
+            // Transform back to world space
+            worldPos = DrillSpaceToWorld(drillSpace);
+            
+            // Apply bounds clamping if enabled
+            if (enforceBounds > 0)
+            {
+                worldPos = ClampToBounds(worldPos);
+            }
+            
+            affected = 1.0;
+        }
+    }
+    
+    results[index] = float4(worldPos, affected);
+}
