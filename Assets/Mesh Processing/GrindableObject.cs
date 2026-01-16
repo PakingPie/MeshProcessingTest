@@ -196,53 +196,42 @@ public class GrindableObject : MonoBehaviour
     /// <returns>Position clamped to mesh surface</returns>
     public Vector3 ClampToMeshSurface(Vector3 originalPos, Vector3 targetPos, Vector3 grindDirection)
     {
-        // Step 1: Always clamp to AABB first - this is the absolute boundary
+        // Step 1: Always clamp to AABB first
         Vector3 clampedPos = ClampToOriginalBounds(targetPos);
 
-        // If BVH is not available or disabled, return AABB-clamped position
         if (!useBVHBounds || meshBVH == null)
         {
             return clampedPos;
         }
 
-        // Step 2: Try raycast for precise surface clamping
-        // Cast ray from original position in grind direction
-        if (meshBVH.Raycast(originalPos, grindDirection, out Vector3 hitPoint, out float hitDistance))
-        {
-            // Calculate how far we're trying to move in the grind direction
-            Vector3 moveVector = targetPos - originalPos;
-            float moveDistanceAlongGrind = Vector3.Dot(moveVector, grindDirection);
+        // Calculate movement
+        Vector3 moveVector = clampedPos - originalPos;
+        float moveDistance = moveVector.magnitude;
 
-            // If we're trying to move past the surface, clamp to surface
-            if (moveDistanceAlongGrind > 0 && moveDistanceAlongGrind > hitDistance)
-            {
-                clampedPos = hitPoint;
-            }
-            else
-            {
-                // Movement is within bounds, use the AABB-clamped position
-                // (which might be the same as targetPos if it was inside AABB)
-            }
-        }
-        else
+        if (moveDistance < 0.0001f)
         {
-            // Step 3: Raycast missed - use closest point on mesh as fallback
-            // This handles edge cases like vertices on the surface, parallel rays, etc.
-            
-            // Only use closest point if the AABB-clamped position is different from target
-            // (meaning we were trying to go outside bounds)
-            if (Vector3.Distance(clampedPos, targetPos) > 0.0001f)
+            return clampedPos;
+        }
+
+        Vector3 moveDir = moveVector / moveDistance;
+
+        // KEY FIX: Offset ray origin to skip past the starting surface
+        float skipDistance = 0.02f;
+        Vector3 rayOrigin = originalPos + moveDir * skipDistance;
+
+        if (meshBVH.Raycast(rayOrigin, moveDir, out Vector3 hitPoint, out float hitDistance))
+        {
+            float remainingDistance = moveDistance - skipDistance;
+
+            if (remainingDistance > hitDistance)
             {
-                // Find closest point on original mesh surface
-                Vector3 closestPoint = meshBVH.ClosestPointOnMesh(clampedPos, out float distance);
-                
-                // Use the closest point, but ensure it's still within AABB
-                clampedPos = ClampToOriginalBounds(closestPoint);
+                // Target is beyond exit surface - clamp
+                return ClampToOriginalBounds(hitPoint);
             }
         }
 
-        // Final safety check: ensure we never return a position outside AABB
-        return ClampToOriginalBounds(clampedPos);
+        // Allow movement
+        return clampedPos;
     }
 
     /// <summary>
@@ -320,7 +309,7 @@ public class GrindableObject : MonoBehaviour
             {
                 // Get the raw projected position first
                 projectedPos = tool.ProjectToSurface(worldPos, out wasProjected);
-                
+
                 if (wasProjected)
                 {
                     // Use ClampToMeshSurface for consistent behavior with grinding

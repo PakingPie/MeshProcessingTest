@@ -130,7 +130,6 @@ GameObject:
   - component: {fileID: 264452395}
   - component: {fileID: 264452394}
   - component: {fileID: 264452393}
-  - component: {fileID: 264452392}
   - component: {fileID: 264452391}
   m_Layer: 0
   m_Name: Cylinder
@@ -151,37 +150,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fa1ad7bb4e4253d4a928f931d199fc5c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DrillTool
-  radius: 0.1
-  length: 1
+  radius: 0.2
+  length: 0.5
   drillAxis: 3
   useConfigurableDepth: 0
   configurableDepth: 0.5
   showDebugCylinder: 1
   cylinderColor: {r: 0, g: 1, b: 0, a: 0.5}
   debugSegments: 32
---- !u!136 &264452392
-CapsuleCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 264452390}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 2
-  m_Radius: 0.5000001
-  m_Height: 2
-  m_Direction: 1
-  m_Center: {x: 0.000000059604645, y: 0, z: -0.00000008940697}
 --- !u!23 &264452393
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -189,7 +165,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 264452390}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -248,7 +224,7 @@ Transform:
   m_GameObject: {fileID: 264452390}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 3.63, y: 0, z: 0}
+  m_LocalPosition: {x: 0.038, y: 1.622, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -803,7 +779,6 @@ GameObject:
   - component: {fileID: 1994714075}
   - component: {fileID: 1994714074}
   - component: {fileID: 1994714073}
-  - component: {fileID: 1994714072}
   - component: {fileID: 1994714071}
   m_Layer: 0
   m_Name: Sphere
@@ -831,27 +806,6 @@ MonoBehaviour:
   showOriginalBounds: 0
   showBVHBounds: 1
   colorUpdater: {fileID: 0}
---- !u!135 &1994714072
-SphereCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1994714070}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Radius: 0.5
-  m_Center: {x: 0, y: 0, z: 0}
 --- !u!23 &1994714073
 MeshRenderer:
   m_ObjectHideFlags: 0

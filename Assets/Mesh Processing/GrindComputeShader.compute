@@ -130,7 +130,7 @@ bool RayTriangleIntersection(float3 origin, float3 dir, float3 v0, float3 v1, fl
     return t > EPSILON;
 }
 
-// BVH raycast - returns true if hit, with hit point and distance
+// BVH raycast - returns true if hit, with hit vertex and distance
 bool BVHRaycast(float3 origin, float3 direction, out float3 hitPoint, out float hitDistance)
 {
     hitPoint = float3(0, 0, 0);
@@ -197,7 +197,7 @@ bool BVHRaycast(float3 origin, float3 direction, out float3 hitPoint, out float 
     return anyHit;
 }
 
-// Closest point on a triangle to a given point
+// Closest vertex on a triangle to a given vertex
 float3 ClosestPointOnTriangle(float3 p, float3 a, float3 b, float3 c)
 {
     float3 ab = b - a;
@@ -248,21 +248,21 @@ float3 ClosestPointOnTriangle(float3 p, float3 a, float3 b, float3 c)
     return a + ab * v2 + ac * w2;
 }
 
-// Distance from point to AABB (0 if inside)
-float DistanceToAABB(float3 point, float3 bmin, float3 bmax)
+// Distance from vertex to AABB (0 if inside)
+float DistanceToAABB(float3 vertex, float3 bmin, float3 bmax)
 {
-    float3 closest = clamp(point, bmin, bmax);
-    return length(point - closest);
+    float3 closest = clamp(vertex, bmin, bmax);
+    return length(vertex - closest);
 }
 
-// Find closest point on mesh using BVH
-float3 ClosestPointOnMesh(float3 point, out float closestDistance)
+// Find closest vertex on mesh using BVH
+float3 ClosestPointOnMesh(float3 vertex, out float closestDistance)
 {
     closestDistance = 1e10;
-    float3 closestPoint = point;
+    float3 closestPoint = vertex;
     
     if (bvhNodeCount == 0)
-        return point;
+        return vertex;
     
     int stack[MAX_STACK_SIZE];
     int stackPtr = 0;
@@ -277,8 +277,8 @@ float3 ClosestPointOnMesh(float3 point, out float closestDistance)
         
         BVHNode node = bvhNodes[nodeIdx];
         
-        // Check if this node could contain a closer point
-        float boundsDist = DistanceToAABB(point, node.boundsMin, node.boundsMax);
+        // Check if this node could contain a closer vertex
+        float boundsDist = DistanceToAABB(vertex, node.boundsMin, node.boundsMax);
         if (boundsDist >= closestDistance)
             continue;
         
@@ -288,8 +288,8 @@ float3 ClosestPointOnMesh(float3 point, out float closestDistance)
             for (int i = 0; i < node.triangleCount; i++)
             {
                 GPUTriangle tri = bvhTriangles[node.leftOrTriangleOffset + i];
-                float3 triClosest = ClosestPointOnTriangle(point, tri.v0, tri.v1, tri.v2);
-                float dist = length(point - triClosest);
+                float3 triClosest = ClosestPointOnTriangle(vertex, tri.v0, tri.v1, tri.v2);
+                float dist = length(vertex - triClosest);
                 if (dist < closestDistance)
                 {
                     closestDistance = dist;
@@ -334,7 +334,7 @@ bool IsInCrossSection(float3 localPos, float3 halfExtents, int axisIndex)
     }
 }
 
-// Check if point should be ground and get target position
+// Check if vertex should be ground and get target position
 bool ShouldGrindAndGetTarget(float3 localPos, float3 halfExtents, int axisIndex, float axisSign, out float3 targetLocal)
 {
     targetLocal = localPos;
@@ -360,52 +360,52 @@ bool ShouldGrindAndGetTarget(float3 localPos, float3 halfExtents, int axisIndex,
     return shouldGrind;
 }
 
-// Main clamping function - multi-tier approach
+
+// Main clamping function - prevents vertices from exiting the far side of mesh
 float3 ClampToMeshSurface(float3 originalPos, float3 targetPos, float3 direction)
 {
-    // Step 1: Always clamp to AABB first - this is the absolute boundary
+    // Step 1: Always clamp to AABB first
     float3 clampedPos = ClampToAABB(targetPos, boundsMin, boundsMax);
     
-    // If BVH is not available, return AABB-clamped position
     if (useBVH == 0 || bvhNodeCount == 0)
     {
         return clampedPos;
     }
     
-    // Step 2: Try raycast for precise surface clamping
+    // Calculate movement
+    float3 moveVector = clampedPos - originalPos;
+    float moveDistance = length(moveVector);
+    
+    if (moveDistance < EPSILON)
+    {
+        return clampedPos; // No significant movement
+    }
+    
+    float3 moveDir = moveVector / moveDistance;
+    
+    // KEY FIX: Offset ray origin to skip past the surface we're starting on
+    // This prevents self-intersection with the nearby triangles
+    float skipDistance = 0.02; // Adjust based on mesh scale
+    float3 rayOrigin = originalPos + moveDir * skipDistance;
+    
     float3 hitPoint;
     float hitDistance;
     
-    if (BVHRaycast(originalPos, direction, hitPoint, hitDistance))
+    if (BVHRaycast(rayOrigin, moveDir, hitPoint, hitDistance))
     {
-        // Calculate how far we're trying to move in the grind direction
-        float3 moveVector = targetPos - originalPos;
-        float moveDistanceAlongGrind = dot(moveVector, direction);
+        // Found a surface ahead (the "exit" surface)
+        // Check if target would go past it
+        float remainingDistance = moveDistance - skipDistance;
         
-        // If we're trying to move past the surface, clamp to surface
-        if (moveDistanceAlongGrind > 0 && moveDistanceAlongGrind > hitDistance)
+        if (remainingDistance > hitDistance)
         {
-            clampedPos = hitPoint;
-        }
-        // else: Movement is within bounds, use the AABB-clamped position
-    }
-    else
-    {
-        // Step 3: Raycast missed - use closest point on mesh as fallback
-        // Only if the AABB-clamped position is different from target
-        float distFromTarget = length(clampedPos - targetPos);
-        if (distFromTarget > EPSILON)
-        {
-            float closestDist;
-            float3 closestPoint = ClosestPointOnMesh(clampedPos, closestDist);
-            
-            // Use the closest point, but ensure it's still within AABB
-            clampedPos = ClampToAABB(closestPoint, boundsMin, boundsMax);
+            // Target is beyond the exit surface - clamp to surface
+            return ClampToAABB(hitPoint, boundsMin, boundsMax);
         }
     }
     
-    // Final safety check: ensure we never return a position outside AABB
-    return ClampToAABB(clampedPos, boundsMin, boundsMax);
+    // Either no surface ahead, or target is before the surface - allow movement
+    return clampedPos;
 }
 
 [numthreads(THREAD_GROUP_SIZE, 1, 1)]
